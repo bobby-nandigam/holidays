@@ -6,13 +6,13 @@ import os
 import uvicorn
 
 # -----------------------------
-# Database connection info from environment variables
+# DB connection info
 # -----------------------------
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST", "15.206.128.228")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "postgres")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "psql")
 
 # -----------------------------
 # FastAPI app
@@ -24,13 +24,14 @@ app = FastAPI(title="Festival Lookup API")
 # -----------------------------
 def get_db_connection():
     try:
-        return psycopg2.connect(
+        conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
             dbname=DB_NAME,
             user=DB_USER,
             password=DB_PASSWORD
         )
+        return conn
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
 
@@ -72,15 +73,12 @@ def get_festivals(
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Distinct festivals, case-insensitive, include national holidays
+        # Case-insensitive join for district and state names
         query = """
         SELECT DISTINCT f.holidayname
         FROM festival f
-        JOIN india_districts d 
-            ON LOWER(TRIM(f.state_name)) = LOWER(TRIM(d.state_name))
-               OR LOWER(TRIM(f.state_name)) = 'all india'
-        WHERE f.holidaydate = %s
-          AND LOWER(TRIM(d.district_name)) = LOWER(TRIM(%s))
+        JOIN india_districts d ON LOWER(f.state_name) = LOWER(d.state_name)
+        WHERE f.holidaydate = %s AND LOWER(d.district_name) = LOWER(%s)
         ORDER BY f.holidayname
         """
         cur.execute(query, (holidaydate.strip(), district.strip()))
@@ -99,6 +97,5 @@ def get_festivals(
 # Run as Python script
 # -----------------------------
 if __name__ == "__main__":
-    # Use port from Render environment variable or default 8000 locally
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Use 0.0.0.0 for public access on Render
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
